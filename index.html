@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>HRM Live</title>
+<meta name="description" content="Real-time heart rate monitor for any Bluetooth LE chest strap or armband. Runs entirely in your browser; no data leaves your device.">
+<meta name="theme-color" content="#0d1014">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<style>
+  :root{
+    --bg:#0d1014; --card:#161a20; --card2:#1c2128; --fg:#eef1f5; --mute:#8d97a5; --line:#262c35;
+    --accent:#ff4d5e; --rr:#4dc3ff; --grid:rgba(255,255,255,.07);
+    --z0:#7b8794; --z1:#5aa9ff; --z2:#3ddc97; --z3:#f5c542; --z4:#ff9248; --z5:#ff4d5e;
+    --zone:var(--z0);
+    --radius:16px;
+  }
+  @media (prefers-color-scheme:light){
+    :root{--bg:#f3f5f8;--card:#fff;--card2:#f6f8fa;--fg:#14181f;--mute:#667085;--line:#e3e7ec;--grid:rgba(0,0,0,.07);
+      --z1:#2f8cf0;--z2:#14b673;--z3:#d9a406;--z4:#f07a1f;--z5:#e0364a;--rr:#1d9bd8}
+  }
+  *{box-sizing:border-box}
+  html{color-scheme:light dark}
+  body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:max(14px,env(safe-area-inset-top)) max(14px,env(safe-area-inset-right)) max(24px,env(safe-area-inset-bottom)) max(14px,env(safe-area-inset-left))}
+  .wrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+  button,select,input{font:inherit;color:inherit}
+  button{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 14px;cursor:pointer;transition:background .15s,transform .05s}
+  button:hover{background:var(--card2)} button:active{transform:scale(.98)}
+  button:disabled{opacity:.45;cursor:default}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.primary:hover{filter:brightness(1.08)}
+  button.icon{padding:8px 10px;line-height:1}
+  :focus-visible{outline:2px solid var(--rr);outline-offset:2px}
+
+  header{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:8px;font-weight:700;font-size:18px;margin-right:auto}
+  .brand svg{width:22px;height:22px;fill:var(--accent)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius)}
+
+  #banner{display:none;padding:10px 14px;border-radius:12px;background:rgba(245,197,66,.12);border:1px solid rgba(245,197,66,.4);font-size:13.5px}
+
+  .hero{position:relative;overflow:hidden;padding:18px 20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;border-top:4px solid var(--zone);transition:border-color .4s}
+  .hero::after{content:"";position:absolute;inset:0;background:radial-gradient(60% 120% at 0% 50%,var(--zone),transparent 70%);opacity:.10;pointer-events:none;transition:opacity .4s}
+  .reading{display:flex;align-items:center;gap:14px;position:relative;z-index:1}
+  #heart{width:clamp(34px,7vw,56px);height:auto;fill:var(--zone);transition:fill .4s;transform-origin:center}
+  #heart.on{animation:beat var(--beat,.9s) ease-out infinite}
+  @keyframes beat{0%{transform:scale(1)}12%{transform:scale(1.22)}35%{transform:scale(1)}}
+  @media (prefers-reduced-motion:reduce){#heart.on{animation:none}}
+  #bpm{font-size:clamp(72px,17vw,150px);font-weight:800;line-height:.9;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+  .unit{color:var(--mute);font-weight:600;letter-spacing:.08em;align-self:flex-end;padding-bottom:.4em}
+  .side{position:relative;z-index:1;display:flex;flex-direction:column;gap:8px;min-width:200px;flex:1}
+  #zonePill{display:inline-flex;align-items:center;gap:8px;align-self:flex-start;padding:5px 12px;border-radius:99px;background:var(--card2);border:1px solid var(--line);font-weight:600}
+  #zonePill i{width:10px;height:10px;border-radius:50%;background:var(--zone);transition:background .4s}
+  #pct{color:var(--mute);font-variant-numeric:tabular-nums}
+  #devline{color:var(--mute);font-size:13px}
+  #status{font-size:13px;color:var(--mute)}
+  #status.err{color:var(--accent)}
+
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px}
+  .stat{padding:10px 12px}
+  .stat b{display:block;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.2}
+  .stat span{color:var(--mute);font-size:12px}
+
+  .chartcard{padding:10px 10px 6px}
+  .toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:0 4px 6px}
+  .toolbar .lg{color:var(--mute);font-size:12px;display:flex;gap:12px;margin-right:auto}
+  .toolbar .lg i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+  select{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+  canvas{width:100%;height:clamp(200px,34vh,320px);display:block;touch-action:pan-y}
+
+  .zones{padding:14px 16px}
+  .zones h2,.dev h2{font-size:13px;margin:0 0 10px;color:var(--mute);font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+  #zbar{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--card2);margin-bottom:12px}
+  #zbar div{height:100%;transition:width .5s}
+  .zrow{display:grid;grid-template-columns:12px 1fr auto auto;gap:10px;align-items:center;padding:3px 0;font-size:14px}
+  .zrow i{width:12px;height:12px;border-radius:3px}
+  .zrow .rng,.zrow .tm{color:var(--mute);font-variant-numeric:tabular-nums}
+  .zrow .tm{min-width:56px;text-align:right;color:var(--fg)}
+  .zrow.cur{font-weight:700}
+
+  footer{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--mute);font-size:12.5px}
+  footer .grow{margin-right:auto}
+
+  dialog{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:var(--radius);padding:20px;max-width:420px;width:calc(100vw - 28px)}
+  dialog::backdrop{background:rgba(0,0,0,.55)}
+  dialog h2{margin:0 0 14px;font-size:18px}
+  .f{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+  .f label{font-size:13px;color:var(--mute)}
+  .f input[type=number]{background:var(--card2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+  .f.chk{flex-direction:row;align-items:flex-start;gap:10px}
+  .f.chk label{color:var(--fg);font-size:14px}
+  .f.chk small{display:block;color:var(--mute);font-size:12px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+      HRM Live
+    </div>
+    <button id="demo" title="Simulate a heart rate monitor">Demo</button>
+    <button id="settingsBtn" class="icon" aria-label="Settings" title="Settings">⚙</button>
+    <button id="connect" class="primary">Connect</button>
+  </header>
+
+  <div id="banner"></div>
+
+  <section class="card hero" id="hero">
+    <div class="reading">
+      <svg id="heart" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+      <div id="bpm" aria-label="Heart rate">--</div>
+      <div class="unit">BPM</div>
+    </div>
+    <div class="side">
+      <div id="zonePill"><i></i><span id="zoneName">No signal</span></div>
+      <div id="pct">&nbsp;</div>
+      <div id="devline"></div>
+      <div id="status">Not connected.</div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="card stat"><b id="sMin">--</b><span>Min</span></div>
+    <div class="card stat"><b id="sAvg">--</b><span>Average</span></div>
+    <div class="card stat"><b id="sMax">--</b><span>Max</span></div>
+    <div class="card stat"><b id="sRR">--</b><span>Last RR (ms)</span></div>
+    <div class="card stat"><b id="sHrv">--</b><span>RMSSD (ms)</span></div>
+    <div class="card stat"><b id="sKcal">--</b><span>Energy (kJ)</span></div>
+    <div class="card stat"><b id="sContact">--</b><span>Skin contact</span></div>
+    <div class="card stat"><b id="sBatt">--</b><span>Battery</span></div>
+  </section>
+
+  <section class="card chartcard">
+    <div class="toolbar">
+      <div class="lg"><span><i style="background:var(--accent)"></i>Heart rate</span><span id="lgRR"><i style="background:var(--rr)"></i>RR interval</span></div>
+      <select id="win" aria-label="Chart window">
+        <option value="60">1 min</option><option value="300">5 min</option><option value="900">15 min</option>
+        <option value="3600">1 hour</option><option value="0">Whole session</option>
+      </select>
+    </div>
+    <canvas id="cv" aria-label="Heart rate chart"></canvas>
+  </section>
+
+  <section class="card zones">
+    <h2>Time in zones</h2>
+    <div id="zbar"></div>
+    <div id="zrows"></div>
+  </section>
+
+  <footer>
+    <span class="grow">All data stays in your browser. Nothing is uploaded.</span>
+    <button id="csv" disabled>Export CSV</button>
+    <button id="reset" disabled>Reset session</button>
+  </footer>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="form">
+    <h2>Settings</h2>
+    <div class="two">
+      <div class="f"><label for="fMax">Max heart rate (bpm)</label><input id="fMax" type="number" min="100" max="230"></div>
+      <div class="f"><label for="fAge">Age (to estimate)</label><input id="fAge" type="number" min="5" max="100" placeholder="optional"></div>
+    </div>
+    <div class="f" style="margin-top:-6px"><small style="color:var(--mute);font-size:12px">Zones are percentages of max HR. Entering an age fills max HR using 208 − 0.7 × age.</small></div>
+    <div class="f chk"><input id="fRR" type="checkbox"><label for="fRR">Show RR intervals on chart</label></div>
+    <div class="f chk"><input id="fWake" type="checkbox"><label for="fWake">Keep screen on while connected</label></div>
+    <div class="f chk"><input id="fAll" type="checkbox"><label for="fAll">Show all Bluetooth devices<small>Use if your monitor doesn't appear in the normal list.</small></label></div>
+    <div class="actions"><button value="cancel">Cancel</button><button value="ok" class="primary">Save</button></div>
+  </form>
+</dialog>
+
+<script>
+'use strict';
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+/* ---------- constants ---------- */
+const U = { hr:0x180d, hrm:0x2a37, loc:0x2a38, batt:0x180f, lvl:0x2a19, info:0x180a, mfr:0x2a29, model:0x2a24 };
+const LOC = ['Other','Chest','Wrist','Finger','Hand','Ear lobe','Foot'];
+const ZONES = [
+  { n:'Rest',        lo:0   },
+  { n:'Z1 Warm-up',  lo:.5  },
+  { n:'Z2 Easy',     lo:.6  },
+  { n:'Z3 Aerobic',  lo:.7  },
+  { n:'Z4 Threshold',lo:.8  },
+  { n:'Z5 Maximum',  lo:.9  },
+];
+
+/* ---------- settings ---------- */
+const DEF = { maxHr:190, age:'', all:false, wake:true, rr:true, win:300 };
+const S = { ...DEF };
+try { Object.assign(S, JSON.parse(localStorage.getItem('hrm-live') || '{}')); } catch {}
+const saveS = () => { try { localStorage.setItem('hrm-live', JSON.stringify(S)); } catch {} };
+
+/* ---------- state ---------- */
+let samples = [];          // {t, bpm}
+let rrs = [];              // {t, r}
+let rrClean = [];
+let lastRR = null, lastClean = null;
+let st, zoneMs, lastT, t0, energy, curBpm;
+function resetData() {
+  samples = []; rrs = []; rrClean = []; lastRR = lastClean = null;
+  st = { min: Infinity, max: 0, sum: 0, n: 0 };
+  zoneMs = ZONES.map(() => 0); lastT = null; t0 = null; energy = null; curBpm = null;
+}
+resetData();
+
+const zoneOf = bpm => { const p = bpm / S.maxHr; let z = 0; ZONES.forEach((x, i) => { if (p >= x.lo) z = i; }); return z; };
+const zvar = z => `var(--z${z})`;
+const fmtT = ms => { const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}` : `${m}:${String(ss).padStart(2,'0')}`; };
+
+/* ---------- tab icon ---------- */
+const favLink = document.createElement('link'); favLink.rel = 'icon'; document.head.appendChild(favLink);
+const favCv = document.createElement('canvas'); favCv.width = favCv.height = 64;
+function setTabIcon(bpm, color) {
+  const c = favCv.getContext('2d');
+  c.clearRect(0, 0, 64, 64);
+  c.fillStyle = bpm == null ? '#555' : color; c.beginPath();
+  c.roundRect ? c.roundRect(0, 0, 64, 64, 14) : c.rect(0, 0, 64, 64); c.fill();
+  c.fillStyle = '#fff'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  const t = bpm == null ? '♥' : String(bpm);
+  c.font = `bold ${t.length > 2 ? 40 : 52}px system-ui,sans-serif`; c.fillText(t, 32, 35);
+  favLink.href = favCv.toDataURL('image/png');
+  document.title = bpm == null ? 'HRM Live' : `♥ ${bpm} – HRM Live`;
+}
+setTabIcon(null);
+
+/* ---------- parsing ---------- */
+function parseHR(dv) {
+  const f = dv.getUint8(0); let i = 1, bpm;
+  if (f & 1) { bpm = dv.getUint16(1, true); i = 3; } else { bpm = dv.getUint8(1); i = 2; }
+  const contact = (f & 4) ? !!(f & 2) : null;
+  let ee = null; if (f & 8) { ee = dv.getUint16(i, true); i += 2; }
+  const rr = [];
+  if (f & 16) for (; i + 1 < dv.byteLength; i += 2) rr.push(dv.getUint16(i, true) / 1024 * 1000);
+  return { bpm, rr, contact, ee };
+}
+
+/* ---------- ingest ---------- */
+function ingest({ bpm, rr = [], contact = null, ee = null }) {
+  const now = performance.now(); if (t0 == null) t0 = now; const t = now - t0;
+  if (bpm > 0) {
+    samples.push({ t, bpm });
+    st.min = Math.min(st.min, bpm); st.max = Math.max(st.max, bpm); st.sum += bpm; st.n++;
+    if (lastT != null) zoneMs[zoneOf(bpm)] += Math.min(t - lastT, 5000);
+    lastT = t; curBpm = bpm;
+    const z = zoneOf(bpm);
+    document.documentElement.style.setProperty('--zone', zvar(z));
+    $('bpm').textContent = bpm;
+    $('heart').classList.add('on'); $('heart').style.setProperty('--beat', (60 / bpm).toFixed(2) + 's');
+    $('zoneName').textContent = ZONES[z].n;
+    $('pct').textContent = Math.round(bpm / S.maxHr * 100) + '% of max HR';
+    setTabIcon(bpm, getComputedStyle(document.documentElement).getPropertyValue(`--z${z}`).trim());
+    $('sMin').textContent = st.min; $('sMax').textContent = st.max; $('sAvg').textContent = Math.round(st.sum / st.n);
+  }
+  for (const r of rr) {
+    rrs.push({ t, r }); lastRR = r;
+    if (lastClean == null || Math.abs(r - lastClean) / lastClean < .2) { rrClean.push(r); lastClean = r; }
+  }
+  if (rr.length) $('sRR').textContent = Math.round(lastRR);
+  if (rrClean.length > 2) {
+    const a = rrClean.slice(-60); let s = 0; for (let i = 1; i < a.length; i++) s += (a[i] - a[i-1]) ** 2;
+    $('sHrv').textContent = Math.round(Math.sqrt(s / (a.length - 1)));
+  }
+  if (ee != null) { energy = ee; $('sKcal').textContent = ee; }
+  $('sContact').textContent = contact === null ? 'n/a' : contact ? 'Yes' : 'No';
+  $('csv').disabled = $('reset').disabled = false;
+  renderZones();
+}
+
+/* ---------- zones panel ---------- */
+const zrows = $('zrows'), zbar = $('zbar');
+function buildZones() {
+  zrows.innerHTML = ''; zbar.innerHTML = '';
+  ZONES.forEach((z, i) => {
+    const lo = Math.round(z.lo * S.maxHr), hi = i < ZONES.length - 1 ? Math.round(ZONES[i+1].lo * S.maxHr) - 1 : S.maxHr;
+    const row = document.createElement('div'); row.className = 'zrow'; row.id = 'zr' + i;
+    row.innerHTML = `<i style="background:${zvar(i)}"></i><span>${z.n}</span><span class="rng">${i === 0 ? '<' + (Math.round(ZONES[1].lo*S.maxHr)) : i === 5 ? lo + '+' : lo + '–' + hi}</span><span class="tm">0:00</span>`;
+    zrows.appendChild(row);
+    const seg = document.createElement('div'); seg.id = 'zs' + i; seg.style.background = zvar(i); seg.style.width = '0%'; zbar.appendChild(seg);
+  });
+}
+function renderZones() {
+  const tot = zoneMs.reduce((a, b) => a + b, 0) || 1, cur = curBpm == null ? -1 : zoneOf(curBpm);
+  zoneMs.forEach((ms, i) => {
+    $('zr' + i).querySelector('.tm').textContent = fmtT(ms);
+    $('zr' + i).classList.toggle('cur', i === cur);
+    $('zs' + i).style.width = (ms / tot * 100) + '%';
+  });
+}
+
+/* ---------- chart ---------- */
+const cv = $('cv'), ctx = cv.getContext('2d');
+let hoverX = null;
+cv.addEventListener('pointermove', e => { hoverX = e.offsetX; });
+cv.addEventListener('pointerleave', () => { hoverX = null; });
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function lowerBound(a, t, key) { let l = 0, h = a.length; while (l < h) { const m = (l + h) >> 1; if (a[m][key] < t) l = m + 1; else h = m; } return l; }
+
+function draw() {
+  const dpr = devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const L = 34, R = S.rr ? 40 : 10, T = 10, B = 22, pw = w - L - R, ph = h - T - B;
+  const now = t0 == null ? 0 : performance.now() - t0;
+  const span = S.win === 0 ? Math.max(60000, now) : S.win * 1000;
+  const tMin = Math.max(0, now - span), tMax = tMin + span;
+  const i0 = lowerBound(samples, tMin, 't'), vis = samples.length - i0;
+  const mute = css('--mute'), grid = css('--grid');
+
+  let lo = 50, hi = 130;
+  if (vis) { let a = 1e9, b = 0; for (let i = i0; i < samples.length; i++) { const v = samples[i].bpm; if (v < a) a = v; if (v > b) b = v; }
+    lo = Math.floor((a - 6) / 10) * 10; hi = Math.ceil((b + 6) / 10) * 10; if (hi - lo < 40) { const m = (hi + lo) / 2; lo = Math.floor((m - 20) / 10) * 10; hi = lo + 40; } }
+  const X = t => L + (t - tMin) / span * pw, Y = v => T + (1 - (v - lo) / (hi - lo)) * ph;
+
+  // zone bands
+  ZONES.forEach((z, i) => {
+    const a = z.lo * S.maxHr, b = i < ZONES.length - 1 ? ZONES[i+1].lo * S.maxHr : 999;
+    const ya = Math.max(a, lo), yb = Math.min(b, hi); if (yb <= ya) return;
+    ctx.globalAlpha = .10; ctx.fillStyle = css(`--z${i}`); ctx.fillRect(L, Y(yb), pw, Y(ya) - Y(yb)); ctx.globalAlpha = 1;
+  });
+  // grid + y labels
+  const step = [5, 10, 20, 25, 50].find(s => (hi - lo) / s <= 6) || 50;
+  ctx.font = '11px system-ui'; ctx.textAlign = 'right'; ctx.fillStyle = mute; ctx.strokeStyle = grid; ctx.lineWidth = 1;
+  for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) { const y = Math.round(Y(v)) + .5; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + pw, y); ctx.stroke(); ctx.fillText(v, L - 5, y + 4); }
+  // x labels
+  ctx.textAlign = 'center';
+  for (let i = 0; i <= 4; i++) { const back = span * (4 - i) / 4; ctx.fillText(i === 4 ? 'now' : '−' + fmtT(back), L + pw * i / 4, h - 5); }
+
+  // RR
+  if (S.rr) {
+    const j0 = lowerBound(rrs, tMin, 't');
+    if (rrs.length - j0 > 1) {
+      let a = 1e9, b = 0; for (let j = j0; j < rrs.length; j++) { const v = rrs[j].r; if (v < a) a = v; if (v > b) b = v; }
+      a -= 40; b += 40; const RY = v => T + (1 - (v - a) / (b - a)) * ph;
+      ctx.strokeStyle = css('--rr'); ctx.globalAlpha = .75; ctx.lineWidth = 1; ctx.beginPath();
+      const n = rrs.length - j0, stride = Math.max(1, Math.floor(n / pw));
+      for (let j = j0, k = 0; j < rrs.length; j += stride, k++) { const p = rrs[j]; k ? ctx.lineTo(X(p.t), RY(p.r)) : ctx.moveTo(X(p.t), RY(p.r)); }
+      ctx.stroke(); ctx.globalAlpha = 1; ctx.fillStyle = css('--rr'); ctx.textAlign = 'left';
+      ctx.fillText(Math.round(b), L + pw + 5, T + 9); ctx.fillText(Math.round(a), L + pw + 5, T + ph);
+    }
+  }
+  // HR line
+  if (vis) {
+    ctx.save(); ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
+    ctx.strokeStyle = css('--accent'); ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.beginPath();
+    const stride = Math.max(1, Math.floor(vis / pw)); let prev = null;
+    for (let i = i0; i < samples.length; i += stride) { const s = samples[i], x = X(s.t), y = Y(s.bpm);
+      if (prev == null || s.t - prev > 6000) ctx.moveTo(x, y); else ctx.lineTo(x, y); prev = s.t; }
+    ctx.stroke(); ctx.restore();
+    const e = samples[samples.length - 1];
+    if (now - e.t < 6000) { ctx.fillStyle = css(`--z${zoneOf(e.bpm)}`); ctx.beginPath(); ctx.arc(X(e.t), Y(e.bpm), 4.5, 0, 7); ctx.fill(); ctx.strokeStyle = css('--card'); ctx.lineWidth = 2; ctx.stroke(); }
+  } else {
+    ctx.fillStyle = mute; ctx.textAlign = 'center'; ctx.font = '13px system-ui'; ctx.fillText('Waiting for heart rate data…', L + pw / 2, T + ph / 2);
+  }
+  // hover
+  if (hoverX != null && vis && hoverX >= L && hoverX <= L + pw) {
+    const tt = tMin + (hoverX - L) / pw * span; let k = lowerBound(samples, tt, 't');
+    if (k > 0 && (k === samples.length || tt - samples[k-1].t < samples[k].t - tt)) k--;
+    const s = samples[k]; if (s && s.t >= tMin && Math.abs(X(s.t) - hoverX) < 40) {
+      const x = X(s.t), y = Y(s.bpm), txt = `${fmtT(s.t)} · ${s.bpm} bpm · ${ZONES[zoneOf(s.bpm)].n}`;
+      ctx.strokeStyle = mute; ctx.lineWidth = 1; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = css('--accent'); ctx.beginPath(); ctx.arc(x, y, 4, 0, 7); ctx.fill();
+      ctx.font = '12px system-ui'; const tw = ctx.measureText(txt).width + 16, bx = Math.min(Math.max(x - tw / 2, L), L + pw - tw), by = T + 4;
+      ctx.fillStyle = css('--card2'); ctx.strokeStyle = css('--line'); ctx.beginPath(); ctx.roundRect ? ctx.roundRect(bx, by, tw, 24, 6) : ctx.rect(bx, by, tw, 24); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = css('--fg'); ctx.textAlign = 'left'; ctx.fillText(txt, bx + 8, by + 16);
+    }
+  }
+  requestAnimationFrame(draw);
+}
+
+/* ---------- connection ---------- */
+let device = null, want = false, demoTimer = null, reconnecting = false, wl = null;
+const active = () => !!demoTimer || (device && device.gatt.connected);
+function setStatus(msg, err) { $('status').textContent = msg; $('status').classList.toggle('err', !!err); }
+function updateButtons() {
+  const on = device && device.gatt.connected;
+  $('connect').textContent = on ? 'Disconnect' : 'Connect';
+  $('demo').textContent = demoTimer ? 'Stop demo' : 'Demo';
+}
+
+async function wake() {
+  if (!S.wake || !('wakeLock' in navigator) || wl) return;
+  try { wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release', () => { wl = null; }); } catch {}
+}
+function unwake() { try { wl && wl.release(); } catch {} wl = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && active()) wake(); });
+
+async function readStr(svc, uuid) { try { return new TextDecoder().decode(await (await svc.getCharacteristic(uuid)).readValue()).replace(/\0/g, '').trim(); } catch { return ''; } }
+
+async function setup() {
+  setStatus(`Connecting to ${device.name || 'device'}…`);
+  const server = await device.gatt.connect();
+  const svc = await server.getPrimaryService(U.hr);
+  const chr = await svc.getCharacteristic(U.hrm);
+  chr.removeEventListener('characteristicvaluechanged', onHR);
+  chr.addEventListener('characteristicvaluechanged', onHR);
+  await chr.startNotifications();
+  let loc = '', info = '';
+  try { const v = await (await svc.getCharacteristic(U.loc)).readValue(); loc = LOC[v.getUint8(0)] || ''; } catch {}
+  try { const is = await server.getPrimaryService(U.info); info = [await readStr(is, U.mfr), await readStr(is, U.model)].filter(Boolean).join(' '); } catch {}
+  $('devline').textContent = [device.name, loc && `worn: ${loc.toLowerCase()}`, info].filter(Boolean).join(' · ');
+  try {
+    const bs = await server.getPrimaryService(U.batt), bc = await bs.getCharacteristic(U.lvl);
+    const show = v => { $('sBatt').textContent = v.getUint8(0) + '%'; };
+    show(await bc.readValue()); bc.addEventListener('characteristicvaluechanged', e => show(e.target.value)); await bc.startNotifications();
+  } catch { $('sBatt').textContent = 'n/a'; }
+  setStatus('Connected. Waiting for data…'); updateButtons(); wake();
+}
+const onHR = e => ingest(parseHR(e.target.value));
+
+async function onDisc() {
+  updateButtons(); setTabIcon(null); $('heart').classList.remove('on');
+  document.documentElement.style.setProperty('--zone', 'var(--z0)'); $('zoneName').textContent = 'No signal';
+  if (reconnecting) return;
+  if (!want) { unwake(); setStatus('Disconnected.'); return; }
+  reconnecting = true;
+  for (let i = 1; i <= 8 && want; i++) {
+    setStatus(`Connection lost. Reconnecting (${i}/8)…`, true); await sleep(Math.min(1000 * i, 5000));
+    try { await setup(); reconnecting = false; return; } catch {}
+  }
+  reconnecting = false; want = false; unwake(); setStatus('Lost connection to the monitor.', true);
+}
+
+async function connect() {
+  try {
+    stopDemo();
+    const opts = S.all ? { acceptAllDevices: true, optionalServices: [U.hr, U.batt, U.info] }
+                       : { filters: [{ services: [U.hr] }], optionalServices: [U.batt, U.info] };
+    setStatus('Choose your device…');
+    device = await navigator.bluetooth.requestDevice(opts);
+    device.addEventListener('gattserverdisconnected', onDisc);
+    want = true; await setup();
+  } catch (err) {
+    want = false;
+    const m = err.name === 'NotFoundError' ? 'No device selected.' : err.name === 'NetworkError' || /service/i.test(err.message) ? `This device doesn't expose a standard heart rate service. (${err.message})` : err.message;
+    setStatus(m, err.name !== 'NotFoundError'); updateButtons();
+  }
+}
+
+/* ---------- demo ---------- */
+function startDemo() {
+  if (device && device.gatt.connected) { want = false; device.gatt.disconnect(); }
+  resetData(); buildZones(); renderZones(); ['sMin','sAvg','sMax','sRR','sHrv','sKcal','sContact','sBatt'].forEach(i => $(i).textContent = '--');
+  let ph = 0, hr = 72;
+  demoTimer = setInterval(() => {
+    ph += .035; const target = 115 + 55 * Math.sin(ph) + 10 * Math.sin(ph * 4.3);
+    hr += (target - hr) * .25 + (Math.random() - .5) * 1.5;
+    const bpm = Math.round(hr), rr = [60000 / bpm * (1 + (Math.random() - .5) * .08)];
+    ingest({ bpm, rr, contact: true });
+  }, 1000);
+  $('devline').textContent = 'Simulated data'; $('sBatt').textContent = '100%'; setStatus('Demo running.'); updateButtons(); wake();
+}
+function stopDemo() { if (demoTimer) { clearInterval(demoTimer); demoTimer = null; unwake(); setStatus('Demo stopped.'); onDisc(); } }
+
+/* ---------- UI wiring ---------- */
+$('connect').onclick = () => {
+  if (device && device.gatt.connected) { want = false; device.gatt.disconnect(); return; }
+  connect();
+};
+$('demo').onclick = () => demoTimer ? stopDemo() : startDemo();
+$('win').onchange = e => { S.win = +e.target.value; saveS(); };
+$('csv').onclick = () => {
+  const byT = new Map(); rrs.forEach(x => { const k = x.t; (byT.get(k) || byT.set(k, []).get(k)).push(x.r.toFixed(1)); });
+  const rows = ['seconds,bpm,rr_ms', ...samples.map(s => `${(s.t / 1000).toFixed(3)},${s.bpm},${(byT.get(s.t) || []).join(' ')}`)];
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows.join('\n')], { type: 'text/csv' }));
+  a.download = `hrm-${new Date().toISOString().replace(/[:.]/g, '-')}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('reset').onclick = () => {
+  if (samples.length > 30 && !confirm('Clear this session? Export the CSV first if you want to keep it.')) return;
+  resetData(); renderZones(); ['bpm','sMin','sAvg','sMax','sRR','sHrv','sKcal','sContact'].forEach(i => $(i).textContent = '--');
+  $('zoneName').textContent = 'No signal'; $('pct').innerHTML = '&nbsp;'; $('csv').disabled = $('reset').disabled = true;
+  document.documentElement.style.setProperty('--zone', 'var(--z0)'); setTabIcon(null);
+};
+
+const dlg = $('dlg');
+$('settingsBtn').onclick = () => {
+  $('fMax').value = S.maxHr; $('fAge').value = S.age; $('fRR').checked = S.rr; $('fWake').checked = S.wake; $('fAll').checked = S.all; dlg.showModal();
+};
+$('fAge').oninput = e => { const a = +e.target.value; if (a >= 5 && a <= 100) $('fMax').value = Math.round(208 - .7 * a); };
+$('form').addEventListener('submit', e => {
+  if (e.submitter && e.submitter.value === 'ok') {
+    S.maxHr = Math.min(230, Math.max(100, +$('fMax').value || DEF.maxHr)); S.age = $('fAge').value; S.rr = $('fRR').checked; S.wake = $('fWake').checked; S.all = $('fAll').checked;
+    saveS(); buildZones(); renderZones(); if (!S.wake) unwake(); else if (active()) wake();
+    if (curBpm != null) { $('pct').textContent = Math.round(curBpm / S.maxHr * 100) + '% of max HR'; $('zoneName').textContent = ZONES[zoneOf(curBpm)].n; }
+  }
+});
+$('lgRR').style.display = S.rr ? '' : 'none';
+$('fRR').addEventListener('change', e => { $('lgRR').style.display = e.target.checked ? '' : 'none'; });
+$('form').addEventListener('submit', () => { $('lgRR').style.display = S.rr ? '' : 'none'; });
+
+// init
+$('win').value = String(S.win); if ($('win').value !== String(S.win)) $('win').value = '300';
+buildZones(); renderZones(); draw();
+
+if (!navigator.bluetooth) {
+  $('connect').disabled = true;
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const b = $('banner'); b.style.display = 'block';
+  b.textContent = ios ? 'iOS Safari doesn\'t support Web Bluetooth. Open this page in the free Bluefy browser to connect a monitor. Demo mode works anywhere.'
+                      : 'This browser doesn\'t support Web Bluetooth. Use Chrome, Edge, Brave or Opera (desktop or Android). Demo mode works anywhere.';
+  setStatus('Bluetooth unavailable.', true);
+} else if (navigator.bluetooth.getAvailability) {
+  navigator.bluetooth.getAvailability().then(a => { if (!a) { const b = $('banner'); b.style.display = 'block'; b.textContent = 'No Bluetooth adapter found or Bluetooth is turned off.'; } }).catch(() => {});
+}
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
