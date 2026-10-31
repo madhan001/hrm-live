@@ -44,3 +44,7 @@ then open <http://localhost:8000>. Web Bluetooth requires HTTPS or `localhost`.
 ## Privacy
 
 All processing happens in the page. Settings (max HR etc.) are kept in your browser's `localStorage`. Session data is held in memory only and is lost on reload unless you export the CSV.
+
+## License
+
+[MIT](LICENSE)
